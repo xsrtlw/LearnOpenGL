@@ -1,28 +1,16 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <learnopengl/shader_s.h>
+#include <stb_image.h>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 
-const char *vertexShaderSource = "#version 330 core\n"
-	"layout(location = 0) in vec3 aPos;\n"
-	"void main()\n"
-	"{\n"
-	"    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-	"}\0";
-const char* fragmentShader1Source = "#version 330 core\n"
-	"out vec4 FragColor;\n"
-	"void main()\n"
-	"{\n"
-	"   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-	"}\n\0";
-const char* fragmentShader2Source = "#version 330 core\n"
-	"out vec4 FragColor;\n"
-	"void main()\n"
-	"{\n"
-	"   FragColor = vec4(1.0f, 1.0f, 0.0f, 1.0f);\n"
-	"}\n\0";
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+float mixValue = 0.2f;
 
 int main()
 {
@@ -36,7 +24,7 @@ int main()
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	
 	//创建窗口对象 前两个参数是宽高，第三参数是窗口名称。
-	GLFWwindow* window = glfwCreateWindow(800, 600, "LearnOpenGL", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
@@ -54,72 +42,92 @@ int main()
 		return -1;
 	}
 
-	//设置窗口大小 前两个参数控制窗口左下角的位置。第三个和第四个参数控制渲染窗口的宽度和高度
-	glViewport(0, 0, 800, 600);
+	Shader ourShader("4.2.texture.vs", "4.2.texture.fs");
 
 
-	unsigned int vertexShader;
-	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
+	float vertices[] = {
+		//     ---- 位置 ----       ---- 颜色 ----     - 纹理坐标 -
+			 0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   2.0f, 2.0f,   // 右上
+			 0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   2.0f, 0.0f,   // 右下
+			-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // 左下
+			-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 2.0f    // 左上
+	};
+	unsigned int indices[] = {
+		0,1,3,
+		1,2,3
+	};
+	unsigned int VBO, VAO, EBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+	// bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+	glBindVertexArray(VAO);
 
-	int success;
-	char infoLog[512];
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-	if (!success)
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+	// position attribute
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	// color attribute
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+	
+	unsigned int texture1,texture2;
+	glGenTextures(1, &texture1);
+	glBindTexture(GL_TEXTURE_2D, texture1);
+	//为当前绑定的纹理对象设置环绕、过滤模式
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	//加载生成纹理
+	int width, height, nrChannels;
+	stbi_set_flip_vertically_on_load(true);
+	unsigned char* data = stbi_load("container.jpg", &width, &height, &nrChannels, 0);
+	if (data)
 	{
-		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else
+	{
+		std::cout << "Failed to load texture" << std::endl;
 	}
 
-	unsigned int fragmentShaderOrange = glCreateShader(GL_FRAGMENT_SHADER);
-	unsigned int fragmentShaderYellow = glCreateShader(GL_FRAGMENT_SHADER);
-	unsigned int shaderProgramOrange = glCreateProgram();
-	unsigned int shaderProgramYellow = glCreateProgram();
-	glShaderSource(fragmentShaderOrange, 1, &fragmentShader1Source, NULL);
-	glCompileShader(fragmentShaderOrange);
-	glShaderSource(fragmentShaderYellow, 1, &fragmentShader2Source, NULL);
-	glCompileShader(fragmentShaderYellow);
+	stbi_image_free(data);
 
+	glGenTextures(1, &texture2);
+	glBindTexture(GL_TEXTURE_2D, texture2);
 
-	glAttachShader(shaderProgramOrange, vertexShader);
-	glAttachShader(shaderProgramOrange, fragmentShaderOrange);
-	glLinkProgram(shaderProgramOrange);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// set texture wrapping to GL_REPEAT (default wrapping method)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	// set texture filtering parameters
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	// load image, create texture and generate mipmaps
+	data = stbi_load("awesomeface.png", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else
+	{
+		std::cout << "Failed to load texture" << std::endl;
+	}
+	stbi_image_free(data);
 
-	glAttachShader(shaderProgramYellow, vertexShader);
-	glAttachShader(shaderProgramYellow, fragmentShaderYellow);
-	glLinkProgram(shaderProgramYellow);
+	ourShader.use();
+	ourShader.setInt("texture1", 0);
+	ourShader.setInt("texture2", 1);
 
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShaderOrange);
-	glDeleteShader(fragmentShaderYellow);
-
-	float firstTriangle[] = {
-		-0.9f, -0.5f, 0.0f,  // left 
-		-0.0f, -0.5f, 0.0f,  // right
-		-0.45f, 0.5f, 0.0f,  // top 
-	};
-	float secondTriangle[] = {
-		0.0f, -0.5f, 0.0f,  // left
-		0.9f, -0.5f, 0.0f,  // right
-		0.45f, 0.5f, 0.0f   // top 
-	};
-
-	unsigned int VAOs[2], VBOs[2];
-	glGenVertexArrays(2, VAOs);
-	glGenBuffers(2, VBOs);
-
-	glBindVertexArray(VAOs[0]);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOs[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(firstTriangle), firstTriangle, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindVertexArray(VAOs[1]);
-	glBindBuffer(GL_ARRAY_BUFFER, VBOs[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(secondTriangle), secondTriangle, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
 
 	//渲染循环
 	while (!glfwWindowShouldClose(window)) {
@@ -130,22 +138,24 @@ int main()
 		//清空颜色buffer
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glUseProgram(shaderProgramOrange);
-		glBindVertexArray(VAOs[0]);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture1);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, texture2);
 
-		glUseProgram(shaderProgramYellow);
-		glBindVertexArray(VAOs[1]);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		ourShader.setFloat("mixValue", mixValue);
+
+		ourShader.use();
+		glBindVertexArray(VAO);
+		//glDrawArrays(GL_TRIANGLES, 0, 3);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 
 	}
-	glDeleteVertexArrays(2, VAOs);
-	glDeleteBuffers(2, VBOs);
-	glDeleteProgram(shaderProgramOrange);
-	glDeleteProgram(shaderProgramYellow);
+	glDeleteVertexArrays(1,&VAO);
+	glDeleteBuffers(1, &VBO);
 
 	glfwTerminate();
 	return 0;
@@ -160,4 +170,17 @@ void processInput(GLFWwindow* window) {
 	{
 		glfwSetWindowShouldClose(window, true);
 	}
+	if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+	{
+		mixValue += 0.001f; // change this value accordingly (might be too slow or too fast based on system hardware)
+		if (mixValue >= 1.0f)
+			mixValue = 1.0f;
+	}
+	if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+	{
+		mixValue -= 0.001f; // change this value accordingly (might be too slow or too fast based on system hardware)
+		if (mixValue <= 0.0f)
+			mixValue = 0.0f;
+	}
+
 }
